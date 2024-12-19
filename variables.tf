@@ -1,129 +1,93 @@
-# for vpc variables........
-variable "vpc_cidr" {                #2. cidr_block
+variable "project_name" {
     type = string
-    default = "10.0.0.0/16"
-    
-  
 }
-variable "enable_dns_hostnames" {  #3. enable_dns_hostnames
-    type = bool
+
+variable "environment" {
+    type = string
+}
+
+variable "vpc_cidr" {
+    #default = "10.0.0.0/16"
+}
+
+variable "enable_dns_hostnames" {
     default = true
-  
-}
-variable "vpc_tags" {  # for vpc tags
-    type = map
-    default = {}
-  
 }
 
-# for tagging strategy
-#######    Project variables  #################
-variable "project_name"{
-    type = string
-# user to force to give projectname
-}
-variable "environment_name" {
-    type = string
-    default = "dev"
-  
-}
+# Optional
 variable "common_tags" {
-    type = map
-  
+    default = {}
 }
 
-##########   Internetgateway variables.............
+variable "vpc_tags" {
+    default = {}
+}
+
 variable "igw_tags" {
-    type = map  
-default = { }
+    default = {}
 }
 
-
-##############  public subnet variables.............
-
-variable "public_subnet_cidr" {
+variable "public_subnet_cidrs" {
     type = list
-  validation {
-    condition = length(var.public_subnet_cidr) == 2
-    error_message = "Please provide 2 valid public subnet CIDR"
-  }
-}
-
-variable "public_subnet_cidr_tags" {
-    type = map
-  default = {}
-}
-
-############ private subnet variables ................
-
-variable "private_subnet_cidr" {
-    type = list
-  validation {
-    condition = length(var.private_subnet_cidr) == 2
-    error_message = "Please provide 2 valid private subnet CIDR"
-  }
-}
-
-variable "private_subnet_cidr_tags" {
-    type = map
-  default = {}
-}
-
-################## database  subnet variables...............
-  
-  variable "database_subnet_cidr" {
-type = list
     validation {
-      condition = length(var.database_subnet_cidr) == 2
-      error_message = "please provide 2 valid database subnet CIDR"
+        condition = length(var.public_subnet_cidrs) == 2
+        error_message = "Please provide 2 valid public subnet CIDR"
     }
-  }
-  variable "database_subnet_cidr_tags" {
-    type = map
-   default = { } 
-  }
+}
 
-  # nat gateway tags
-  variable "nat_gateway_tags" {
-
-    type = map
+variable "public_subnet_tags" {
     default = {}
-  
-  }
-  # route table tags... for public,private and database..................
-  variable "route_table_public_tags" {
+}
 
-     type = map
-    default = {}
-  }
-   variable "route_table_private_tags" {
+variable "private_subnet_cidrs" {
+    type = list
+    validation {
+        condition = length(var.private_subnet_cidrs) == 2
+        error_message = "Please provide 2 valid private subnet CIDR"
+    }
+}
 
-     type = map
+variable "private_subnet_tags" {
     default = {}
-  }
-   variable "route_table_database_tags" {
+}
 
-     type = map
+variable "database_subnet_cidrs" {
+    type = list
+    validation {
+        condition = length(var.database_subnet_cidrs) == 2
+        error_message = "Please provide 2 valid database subnet CIDR"
+    }
+}
+
+variable "database_subnet_tags" {
     default = {}
-  }
-  # for peering connection with vpc
-# peering is optional ..by default-->false.
-variable "is_peering_required"{
+}
+
+variable "db_subnet_group_tags" {
+    default = {}
+}
+
+variable "nat_gateway_tags" {
+    default = {}
+}
+
+variable "public_route_table_tags" {
+    default = {}
+}
+
+variable "private_route_table_tags" {
+    default = {}
+}
+
+variable "database_route_table_tags" {
+    default = {}
+}
+
+variable "is_peering_required" {
     type = bool
     default = false
-  }
-  variable "accepter_vpcid" {    # accepter_vpcid--->""---->defaultvpc
-    type = string
-    default = ""
-    
-  }
-  variable "vpc_peering_tags" {
-    type = map
-    default = {}
-    
-  }
+}
 
-  variable "database_subnet_group_tags" {
-    type = map
+variable "vpc_peering_tags" {
     default = {}
 }

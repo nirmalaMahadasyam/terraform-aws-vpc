@@ -1,205 +1,183 @@
-# step:1 create VPC                                         #1. vpc only one resourse should give "main"
 resource "aws_vpc" "main" {
-  cidr_block       = var.vpc_cidr                   #2. cidr_block="10.0.0.0/16"
-  instance_tenancy = "default"
-#   tags = {
-#     Name = "main"
-#   }
-   enable_dns_hostnames = var.enable_dns_hostnames    # 3. enable_dns_host_name====>by default--->false.
+  cidr_block       = var.vpc_cidr
+  enable_dns_hostnames = var.enable_dns_hostnames
 
-tags =merge(
+  tags = merge(
     var.common_tags,
-    var.vpc_tags,{
-        #Name = "${var.project_name}-${var.environment_name}"  #expense-Dev
+    var.vpc_tags,
+    {
         Name = local.resource_name
     }
-
-)
- 
+  )
 }
 
-#step2: create Internetgateway(Igw) and attached to vpc
 
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.main.id # this code is for attach to VPC id
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
 
   tags = merge(
     var.common_tags,
     var.igw_tags,
     {
-        #Name = "${var.project_name}-${var.environment_name}"  #expense-Dev
         Name = local.resource_name
     }
-
   )
 }
 
-# step3: create subnets---2 public,2private,2 databases
-#############  public subnet
+
 resource "aws_subnet" "public" {
-    #count = 2
-  count = length(var.public_subnet_cidr)
-  availability_zone = local.az_names[count.index] # select the availability zones
-  map_public_ip_on_launch = true # public ip subnet we need. bydefault=false.
+  count = length(var.public_subnet_cidrs)
   vpc_id     = aws_vpc.main.id
-  cidr_block = var.public_subnet_cidr[count.index]
-
+  cidr_block = var.public_subnet_cidrs[count.index]
+  availability_zone = local.az_names[count.index]
+  map_public_ip_on_launch = true
   tags = merge(
     var.common_tags,
-    var.public_subnet_cidr_tags,
+    var.public_subnet_tags,
     {
-    Name = "${local.resource_name}-${local.az_names[count.index]}"  # expense-dev-us-ease-1a
-  })
-}
-# for private subnet.......... 
-resource "aws_subnet" "private" {
-    #count = 2
-  count = length(var.private_subnet_cidr)
-  availability_zone = local.az_names[count.index] # select the availability zones
-  #map_public_ip_on_launch = true # public ip subnet we need. bydefault=false.
-  vpc_id     = aws_vpc.main.id
-  cidr_block = var.private_subnet_cidr[count.index]
-
-  tags = merge(
-    var.common_tags,
-    var.private_subnet_cidr_tags,
-    {
-    Name = "${local.resource_name}-${local.az_names[count.index]}"
-  })
-}
-
-# for database subnet.......... 
-resource "aws_subnet" "database" {
-    #count = 2
-  count = length(var.database_subnet_cidr)
-  availability_zone = local.az_names[count.index] # select the availability zones
-  #map_public_ip_on_launch = true # public ip subnet we need. bydefault=false.
-   vpc_id     = aws_vpc.main.id
-  cidr_block = var.database_subnet_cidr[count.index]
-
-  tags = merge(
-    var.common_tags,
-    var.database_subnet_cidr_tags,
-    {
-    Name = "${local.resource_name}-${local.az_names[count.index]}" # firstname is public[0] and second name is public[1]
-  })
-}
-
-# subnet database group---peering connections
-resource "aws_db_subnet_group" "default" {
-  name = "${local.resource_name}"
-  subnet_ids = aws_subnet.database[*].id # subnet is list 
-
-  tags = merge(
-    var.common_tags,
-    var.database_subnet_group_tags,
-    {
-        Name = "${local.resource_name}"
+        Name = "${local.resource_name}-public-${local.az_names[count.index]}"
     }
   )
 }
 
-# for Elastic Ip in Terraform
-resource "aws_eip" "eipnat" {
- # instance = aws_instance.web.id
+resource "aws_subnet" "private" {
+  count = length(var.private_subnet_cidrs)
+  vpc_id     = aws_vpc.main.id
+  cidr_block = var.private_subnet_cidrs[count.index]
+  availability_zone = local.az_names[count.index]
+
+  tags = merge(
+    var.common_tags,
+    var.private_subnet_tags,
+    {
+        Name = "${local.resource_name}-private-${local.az_names[count.index]}"
+    }
+  )
+}
+
+resource "aws_subnet" "database" {
+  count = length(var.database_subnet_cidrs)
+  vpc_id     = aws_vpc.main.id
+  cidr_block = var.database_subnet_cidrs[count.index]
+  availability_zone = local.az_names[count.index]
+
+  tags = merge(
+    var.common_tags,
+    var.database_subnet_tags,
+    {
+        Name = "${local.resource_name}-database-${local.az_names[count.index]}"
+    }
+  )
+}
+
+# DB Subnet group for RDS
+resource "aws_db_subnet_group" "default" {
+  name       = local.resource_name
+  subnet_ids = aws_subnet.database[*].id
+
+  tags = merge(
+    var.common_tags,
+    var.db_subnet_group_tags,
+    {
+        Name = local.resource_name
+    }
+  )
+}
+
+resource "aws_eip" "nat" {
   domain   = "vpc"
 }
 
-# for NAT Gateway
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.eipnat.id
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id
 
   tags = merge(
     var.common_tags,
     var.nat_gateway_tags,
     {
-    Name = "${local.resource_name}" # eg: expense-dev
-  })
+        Name = local.resource_name
+    }
+  )
 
   # To ensure proper ordering, it is recommended to add an explicit dependency
   # on the Internet Gateway for the VPC.
-  depends_on = [aws_internet_gateway.gw] # explicit dependency
+  depends_on = [aws_internet_gateway.main]
 }
-# for route table creation----for public route table
+
+# public route table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
-#   route {
-#     cidr_block = "10.0.1.0/24"
-#     gateway_id = aws_internet_gateway.example.id
-#   }
-
-#   route {
-#     ipv6_cidr_block        = "::/0"
-#     egress_only_gateway_id = aws_egress_only_internet_gateway.example.id
-#   }
-
   tags = merge(
     var.common_tags,
-    var.route_table_public_tags,
+    var.public_route_table_tags,
     {
-    Name = "${local.resource_name}-public" # eg: expense-dev-public
-  })
+      Name = "${local.resource_name}-public" #expense-dev-public
+    }
+  )
 }
 
-# for route table creation----for private route table
+# private route table
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
   tags = merge(
     var.common_tags,
-    var.route_table_private_tags,
+    var.private_route_table_tags,
     {
-    Name = "${local.resource_name}-private" # eg: expense-dev
-  })
+      Name = "${local.resource_name}-private" #expense-dev-private
+    }
+  )
 }
 
-# for route table creation----for database route table
+# database route table
 resource "aws_route_table" "database" {
   vpc_id = aws_vpc.main.id
 
   tags = merge(
     var.common_tags,
-    var.route_table_database_tags,
+    var.database_route_table_tags,
     {
-    Name = "${local.resource_name}-database" # eg: expense-dev
-  })
+      Name = "${local.resource_name}-database" #expense-dev-database
+    }
+  )
 }
-# adding routes to the public,private,database route tables
-resource "aws_route" "public_routes" {
+
+# Routes
+resource "aws_route" "public" {
   route_table_id            = aws_route_table.public.id
   destination_cidr_block    = "0.0.0.0/0"
-  gateway_id = aws_internet_gateway.gw.id
-  # vpc_peering_connection_id = "pcx-45ff3dc1"
+  gateway_id = aws_internet_gateway.main.id
 }
-resource "aws_route" "private_routes_nat" {
+
+resource "aws_route" "private_nat" {
   route_table_id            = aws_route_table.private.id
   destination_cidr_block    = "0.0.0.0/0"
-  gateway_id = aws_nat_gateway.nat.id
-  # vpc_peering_connection_id = "pcx-45ff3dc1"
+  nat_gateway_id = aws_nat_gateway.main.id
 }
-resource "aws_route" "database_routes_nat" {
+
+resource "aws_route" "database_nat" {
   route_table_id            = aws_route_table.database.id
   destination_cidr_block    = "0.0.0.0/0"
-  gateway_id = aws_nat_gateway.nat.id
-  # vpc_peering_connection_id = "pcx-45ff3dc1"
+  nat_gateway_id = aws_nat_gateway.main.id
 }
-# associate this route table to the subnet
+
+
 resource "aws_route_table_association" "public" {
-    count = length(var.public_subnet_cidr) # 2 times
-  subnet_id      = element(aws_subnet.public[*].id, count.index ) # total public so we get list in this list pick a first value and second valueby element(list,0)
+  count = length(var.public_subnet_cidrs)
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
+
 resource "aws_route_table_association" "private" {
-    count = length(var.private_subnet_cidr) # 2 times
-  subnet_id      = element(aws_subnet.private[*].id, count.index) # total public
+  count = length(var.private_subnet_cidrs)
+  subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
+
 resource "aws_route_table_association" "database" {
-    count = length(var.database_subnet_cidr) # 2 times
-  subnet_id      = element(aws_subnet.database[*].id, count.index) # total public
+  count = length(var.database_subnet_cidrs)
+  subnet_id      = aws_subnet.database[count.index].id
   route_table_id = aws_route_table.database.id
 }
-
-
